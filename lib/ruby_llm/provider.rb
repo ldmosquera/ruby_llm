@@ -162,16 +162,18 @@ module RubyLLM
             content_type = env.response_headers['content-type']
 
             case content_type
-            when 'text/event-stream'
+            when %r{text/event-stream}
               parser.feed(chunk) do |_type, data|
                 unless data == '[DONE]'
                   parsed_data = JSON.parse(data)
                   block.call(parsed_data)
                 end
               end
-            when 'application/x-ndjson'
-              parsed_data = JSON.parse(chunk)
-              block.call(parsed_data)
+            when %r{application/x-ndjson}
+              chunk.split(/\n+/).each do |line|
+                parsed_data = JSON.parse(line)
+                block.call(parsed_data)
+              end
             else
               raise NotImplementedError, "unsupported content-type in streaming response: #{content_type}"
             end
