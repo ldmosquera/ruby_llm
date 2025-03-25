@@ -31,6 +31,11 @@ RSpec.describe RubyLLM::Providers::Ollama do
         an_object_having_attributes(provider: 'ollama', id: 'snowflake-arctic-embed:22m')
       )
     end
+
+    it 'aliases models to the largest available tag' do
+      chat = RubyLLM.chat(model: 'smollm', provider: 'ollama')
+      expect(chat.model.id).to eq('smollm:135m')
+    end
   end
 
   describe '.chat' do

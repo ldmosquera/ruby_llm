@@ -19,13 +19,11 @@ module RubyLLM
       # @param provider_slug [String, Symbol, nil] optional provider to resolve for
       # @return [String] the resolved model ID or the original if no alias exists
       def resolve(model_id, provider = nil)
-        return model_id unless aliases[model_id]
-
         if provider
-          aliases[model_id][provider.to_s] || model_id
+          @runtime_aliases.dig(provider.to_s, model_id) || aliases.dig(model_id, provider.to_s) || model_id
         else
           # Get native provider's version
-          aliases[model_id].values.first || model_id
+          aliases[model_id]&.values&.first || model_id
         end
       end
 
@@ -33,6 +31,14 @@ module RubyLLM
       # @return [Hash] the aliases mapping
       def aliases
         @aliases ||= load_aliases
+      end
+
+      # Adds extra runtime-only aliases for a specific provider
+      # @return [Hash] the updated aliases mapping
+      def register_runtime_aliases(provider, extra_aliases)
+        # NOTE: not persisted; will be gone after app restart
+        @runtime_aliases ||= {}
+        @runtime_aliases[provider.to_s] = extra_aliases
       end
 
       # Loads aliases from the JSON file

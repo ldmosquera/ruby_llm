@@ -10,13 +10,6 @@ module RubyLLM
           'api/tags'
         end
 
-        # FIXME: include aliases for tags with the format \d+m or \d+b
-        # ie. given these models in the server,
-        # - gemma3:27b
-        # - gemma3:9b
-        #
-        # create an alias gemma3 for gemma3:27b
-
         # NOTE: Unlike other providers for well known APIs with stable model
         # offerings, the Ollama provider deals with local servers which
         # might have arbitrarily named models or even zero models installed.
@@ -38,7 +31,28 @@ module RubyLLM
         private
 
         def parse_list_models_response(response, slug, capabilities) # rubocop:disable Metrics/MethodLength
-          (response.body['models'] || []).map do |model|
+          provider_aliases = {}
+          list = response.body['models'] || []
+
+          # initial pass: discover Ollama "tags"
+          list.each do |model|
+            base, tag = model['name'].split(':', 2)
+            model['model_name_base'] = base if tag
+          end
+
+          # second pass: set aliases for models with multiple sizes
+          list.group_by { |m| m['model_name_base'] }.each do |base, models|
+            # given these models in the server,
+            # - gemma3:27b
+            # - gemma3:9b
+            # then gemma3:27b will get the 'gemma3' alias since the 27b is larger in bytesize
+            largest = models.max_by { |m| m['size'].to_i }
+            provider_aliases[base] = largest['name']
+          end
+          RubyLLM::Aliases.register_runtime_aliases(slug, provider_aliases)
+
+          # final pass: assemble
+          list.map do |model|
             model_id = model['name']
 
             ModelInfo.new(
@@ -57,6 +71,7 @@ module RubyLLM
               input_price_per_million: capabilities.input_price_for(model_id),
               output_price_per_million: capabilities.output_price_for(model_id),
               metadata: {
+                model_name_base: model['model_name_base'],
                 byte_size: model['size']&.to_i,
                 parameter_size: model.dig('details', 'parameter_size'),
                 quantization_level: model.dig('details', 'quantization_level'),
